@@ -9,7 +9,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: PORT
-        value: 5000
+        value: 10000
       - key: MONGODB_URI
         sync: false
       - key: STRIPE_SECRET_KEY
@@ -22,5 +22,5 @@ services:
         sync: false
       - key: CLIENT_URL
         sync: false
-    healthCheckPath: /api/health
+    healthCheckPath: /
     autoDeploy: true

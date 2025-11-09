@@ -65,6 +65,27 @@ app.use((req, res, next) => {
   next();
 });
 
+// Root route - for health checks and API info
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'USDT Payment API is running',
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      auth: '/api/auth/*',
+      payments: '/api/payments/*',
+      transactions: '/api/transactions/*'
+    },
+    documentation: 'https://github.com/borysenkooleh7-ops/strip_intergrate'
+  });
+});
+
+// Support HEAD requests for health checks
+app.head('/', (req, res) => {
+  res.status(200).end();
+});
+
 // API Routes
 app.get('/api/health', (req, res) => {
   res.json({
