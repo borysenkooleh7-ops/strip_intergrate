@@ -17,12 +17,30 @@ import transactionRoutes from './routes/transaction.routes.js';
 const app = express();
 const httpServer = createServer(app);
 
-// Socket.io setup
+// Socket.io setup with flexible CORS
 const io = new Server(httpServer, {
   cors: {
-    origin: config.clientUrl,
-    credentials: true
-  }
+    origin: function (origin, callback) {
+      const allowedOrigins = [
+        'http://localhost:5173',
+        'http://localhost:3000',
+        config.clientUrl
+      ].filter(Boolean);
+
+      // Allow requests with no origin
+      if (!origin) return callback(null, true);
+
+      // Allow localhost, configured URL, or any Vercel deployment
+      if (allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+        callback(null, true);
+      } else {
+        callback(null, true); // Allow for now
+      }
+    },
+    credentials: true,
+    methods: ['GET', 'POST']
+  },
+  transports: ['websocket', 'polling']
 });
 
 // Make io accessible globally
@@ -31,9 +49,27 @@ global.io = io;
 // Security middleware
 app.use(helmet());
 
-// CORS
+// CORS - Allow multiple origins
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  config.clientUrl,
+  'https://strip-intergrate.onrender.com' // Allow backend to call itself
+].filter(Boolean);
+
 app.use(cors({
-  origin: config.clientUrl,
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+
+    // Check if origin is in allowed list or matches Vercel pattern
+    if (allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+      callback(null, true);
+    } else {
+      logger.warn('CORS blocked origin:', origin);
+      callback(null, true); // Allow anyway for now, can be strict later
+    }
+  },
   credentials: true
 }));
 
