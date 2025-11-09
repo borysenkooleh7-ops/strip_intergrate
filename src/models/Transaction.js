@@ -121,7 +121,7 @@ const transactionSchema = new mongoose.Schema({
 // Indexes for efficient queries
 transactionSchema.index({ userId: 1, createdAt: -1 });
 transactionSchema.index({ status: 1, createdAt: -1 });
-transactionSchema.index({ paymentIntentId: 1 });
+// Note: paymentIntentId index is created automatically via unique: true
 
 // Calculate completion time
 transactionSchema.virtual('processingTime').get(function() {

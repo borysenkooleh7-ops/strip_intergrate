@@ -24,8 +24,8 @@ const exchangeRateSchema = new mongoose.Schema({
   },
   expiresAt: {
     type: Date,
-    required: true,
-    index: true
+    required: true
+    // Note: index created below with expireAfterSeconds for auto-deletion
   }
 }, {
   timestamps: true

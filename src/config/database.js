@@ -4,10 +4,7 @@ import logger from '../utils/logger.js';
 
 const connectDatabase = async () => {
   try {
-    const conn = await mongoose.connect(config.mongodb.uri, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
+    const conn = await mongoose.connect(config.mongodb.uri);
 
     logger.info(`MongoDB Connected: ${conn.connection.host}`);
 
