@@ -8,7 +8,9 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "test": "jest",
-    "test:email": "node test-email.js"
+    "test:email": "node test-email.js",
+    "verify-user": "node verify-user.js",
+    "list-users": "node list-users.js"
   },
   "keywords": [
     "payment",
