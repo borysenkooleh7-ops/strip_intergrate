@@ -1,6 +1,7 @@
 import axios from 'axios';
 import ExchangeRate from '../models/ExchangeRate.js';
 import logger from '../utils/logger.js';
+import binanceCryptoService from './binanceCryptoService.js';
 
 class USDTConversionService {
   // Fixed rate tiers - YOUR BUSINESS MODEL
@@ -144,10 +145,83 @@ class USDTConversionService {
   }
 
   /**
-   * Simulate USDT transfer (for MVP)
+   * Execute REAL USDT transfer via Binance
+   * @param {string} transactionId - Internal transaction ID
+   * @param {string} walletAddress - User's USDT wallet address
+   * @param {number} usdtAmount - Amount of USDT to send
+   * @param {string} network - Network to use (TRC20, ERC20, BEP20)
    */
-  static async simulateUSDTTransfer(transactionId, walletAddress, usdtAmount) {
-    logger.info('Simulating USDT transfer', { transactionId, walletAddress, usdtAmount });
+  static async executeUSDTTransfer(transactionId, walletAddress, usdtAmount, network = 'TRC20') {
+    logger.info('🚀 Initiating REAL USDT transfer', {
+      transactionId,
+      walletAddress,
+      usdtAmount,
+      network
+    });
+
+    try {
+      // Check if Binance is configured
+      if (!binanceCryptoService.isReady()) {
+        logger.warn('⚠️  Binance not configured - falling back to simulation');
+        return await this.simulateUSDTTransfer(transactionId, walletAddress, usdtAmount, network);
+      }
+
+      // Validate wallet address format
+      const validation = binanceCryptoService.validateWalletAddress(walletAddress, network);
+      if (!validation.valid) {
+        throw new Error(validation.error);
+      }
+
+      // Check Binance balance before transfer
+      const balance = await binanceCryptoService.getUSDTBalance();
+      logger.info('💰 Current Binance USDT balance:', balance);
+
+      if (balance.free < usdtAmount) {
+        logger.error('❌ Insufficient USDT balance in Binance account', {
+          required: usdtAmount,
+          available: balance.free
+        });
+        throw new Error(`Insufficient USDT balance. Required: ${usdtAmount} USDT, Available: ${balance.free} USDT`);
+      }
+
+      // Execute the real transfer via Binance
+      const result = await binanceCryptoService.sendUSDT(walletAddress, usdtAmount, network);
+
+      logger.info('✅ REAL USDT transfer completed', {
+        transactionId,
+        withdrawalId: result.transactionHash,
+        amount: result.amount,
+        network: result.network
+      });
+
+      // Get explorer URL based on network
+      const explorerUrl = this.getExplorerUrl(result.transactionHash, network);
+
+      return {
+        success: true,
+        transactionHash: result.transactionHash,
+        network: result.network,
+        explorerUrl: explorerUrl,
+        timestamp: result.timestamp,
+        isReal: true // Flag to indicate this is a real transfer
+      };
+
+    } catch (error) {
+      logger.error('❌ USDT transfer failed:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Simulate USDT transfer (fallback when Binance is not configured)
+   */
+  static async simulateUSDTTransfer(transactionId, walletAddress, usdtAmount, network = 'TRC20') {
+    logger.info('🔧 SIMULATION MODE: USDT transfer', { transactionId, walletAddress, usdtAmount, network });
+
+    // Validate wallet address even in simulation
+    if (!this.validateWalletAddress(walletAddress, network)) {
+      throw new Error(`Invalid ${network} wallet address format`);
+    }
 
     // Simulate network delay (1-3 seconds)
     await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
@@ -155,15 +229,35 @@ class USDTConversionService {
     // Generate mock transaction hash
     const txHash = this.generateMockTxHash();
 
-    logger.info('USDT transfer simulated', { transactionId, txHash });
+    logger.info('✅ USDT transfer simulated', { transactionId, txHash });
+
+    const explorerUrl = this.getExplorerUrl(txHash, network);
 
     return {
       success: true,
       transactionHash: txHash,
-      network: 'TRC20',
-      explorerUrl: `https://tronscan.org/#/transaction/${txHash}`,
-      timestamp: new Date()
+      network: network,
+      explorerUrl: explorerUrl,
+      timestamp: new Date(),
+      isReal: false, // Flag to indicate this is simulated
+      simulated: true
     };
+  }
+
+  /**
+   * Get blockchain explorer URL based on network
+   */
+  static getExplorerUrl(txHash, network) {
+    switch (network) {
+      case 'TRC20':
+        return `https://tronscan.org/#/transaction/${txHash}`;
+      case 'ERC20':
+        return `https://etherscan.io/tx/${txHash}`;
+      case 'BEP20':
+        return `https://bscscan.com/tx/${txHash}`;
+      default:
+        return `https://tronscan.org/#/transaction/${txHash}`;
+    }
   }
 
   /**

@@ -8,7 +8,15 @@ const transactionSchema = new mongoose.Schema({
     index: true
   },
 
-  // Payment details
+  // Payment provider
+  paymentProvider: {
+    type: String,
+    enum: ['stripe', 'transak'],
+    default: 'stripe',
+    index: true
+  },
+
+  // Payment details (Stripe)
   paymentIntentId: {
     type: String,
     unique: true,
@@ -22,6 +30,8 @@ const transactionSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+
+  // Amount details
   amountUSD: {
     type: Number,
     required: [true, 'USD amount is required'],
@@ -37,32 +47,35 @@ const transactionSchema = new mongoose.Schema({
   // USDT conversion
   usdtAmount: {
     type: Number,
-    required: true
+    default: 0
   },
   exchangeRate: {
     type: Number,
-    required: true
+    default: null
   },
   conversionFee: {
     type: Number,
-    required: true
+    default: null
   },
   feePercentage: {
     type: Number,
-    required: true
+    default: null
   },
 
   // Status tracking
   status: {
     type: String,
     enum: [
-      'pending',
+      'initiated',      // Transak order created
+      'pending',        // Waiting for payment
       'payment_processing',
       'payment_confirmed',
+      'processing',     // Transak processing
       'converting_to_usdt',
       'usdt_sent',
       'completed',
-      'failed'
+      'failed',
+      'cancelled'       // Transak cancelled
     ],
     default: 'pending',
     index: true

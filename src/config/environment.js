@@ -36,6 +36,27 @@ const config = {
     from: process.env.EMAIL_FROM || 'USDT Payment <noreply@usdtpayment.com>'
   },
 
+  // Binance API for real USDT transfers
+  binance: {
+    apiKey: process.env.BINANCE_API_KEY,
+    apiSecret: process.env.BINANCE_API_SECRET,
+    defaultNetwork: process.env.BINANCE_DEFAULT_NETWORK || 'TRC20' // TRC20, ERC20, or BEP20
+  },
+
+  // CoinDesk API for real-time USDT price data
+  coindesk: {
+    apiKey: process.env.COINDESK_API_KEY,
+    apiName: process.env.COINDESK_API_NAME || 'exchange_test_usdt'
+  },
+
+  // Transak API for on-ramp (direct crypto purchases)
+  transak: {
+    apiKey: process.env.TRANSAK_API_KEY,
+    apiSecret: process.env.TRANSAK_API_SECRET,
+    environment: process.env.TRANSAK_ENVIRONMENT || 'STAGING', // STAGING or PRODUCTION
+    webhookSecret: process.env.TRANSAK_WEBHOOK_SECRET
+  },
+
   logLevel: process.env.LOG_LEVEL || 'info'
 };
 

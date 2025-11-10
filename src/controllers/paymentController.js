@@ -1,6 +1,7 @@
 import Transaction from '../models/Transaction.js';
 import StripeService from '../services/stripeService.js';
 import USDTConversionService from '../services/usdtConversionService.js';
+import coindeskPriceService from '../services/coindeskPriceService.js';
 import config from '../config/environment.js';
 import logger from '../utils/logger.js';
 
@@ -173,17 +174,25 @@ class PaymentController {
 
       logger.info('Starting USDT conversion', { transactionId: transaction._id });
 
-      // Simulate USDT transfer (in production, this would call real exchange API)
-      const transfer = await USDTConversionService.simulateUSDTTransfer(
+      // Execute REAL USDT transfer via Binance (falls back to simulation if not configured)
+      const transfer = await USDTConversionService.executeUSDTTransfer(
         transaction._id,
         transaction.walletAddress,
-        transaction.usdtAmount
+        transaction.usdtAmount,
+        transaction.blockchainNetwork || 'TRC20'
       );
 
-      // Update transaction
+      // Update transaction with transfer details
       transaction.status = 'usdt_sent';
       transaction.usdtSentAt = new Date();
       transaction.transactionHash = transfer.transactionHash;
+      transaction.blockchainNetwork = transfer.network;
+
+      // Store metadata about whether this was a real or simulated transfer
+      if (!transaction.metadata) transaction.metadata = {};
+      transaction.metadata.isRealTransfer = transfer.isReal || false;
+      transaction.metadata.explorerUrl = transfer.explorerUrl;
+
       await transaction.save();
 
       // Emit socket event
@@ -301,22 +310,108 @@ class PaymentController {
 
       if (amount) {
         const conversion = USDTConversionService.calculateConversion(parseFloat(amount));
+
+        // Get market rate comparison from CoinDesk
+        let marketComparison = null;
+        try {
+          marketComparison = await coindeskPriceService.compareRateWithMarket(
+            parseFloat(amount),
+            conversion.exchangeRate
+          );
+        } catch (error) {
+          logger.warn('Could not fetch market comparison:', error.message);
+        }
+
         return res.json({
           success: true,
-          data: conversion
+          data: {
+            ...conversion,
+            marketComparison: marketComparison
+          }
         });
       }
 
-      // Return all tiers
+      // Return all tiers with market data
       const tiers = USDTConversionService.getAllTiers();
       const marketRate = await USDTConversionService.getMarketRate();
+
+      // Get CoinDesk market data
+      let coindeskMarketData = null;
+      try {
+        coindeskMarketData = await coindeskPriceService.getUSDTMarketData();
+      } catch (error) {
+        logger.warn('Could not fetch CoinDesk market data:', error.message);
+      }
 
       res.json({
         success: true,
         data: {
           tiers: tiers,
           marketRate: marketRate,
+          coindeskMarketData: coindeskMarketData,
           lastUpdated: new Date()
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Get real-time market data from CoinDesk
+   */
+  static async getMarketData(req, res, next) {
+    try {
+      const marketData = await coindeskPriceService.getUSDTMarketData();
+      const healthCheck = await coindeskPriceService.healthCheck();
+
+      res.json({
+        success: true,
+        data: {
+          market: marketData,
+          apiStatus: healthCheck
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Compare rates - show user the difference between market and your rates
+   */
+  static async compareRates(req, res, next) {
+    try {
+      const { amount } = req.query;
+
+      if (!amount) {
+        return res.status(400).json({
+          success: false,
+          message: 'Amount parameter is required'
+        });
+      }
+
+      const usdAmount = parseFloat(amount);
+      const conversion = USDTConversionService.calculateConversion(usdAmount);
+      const comparison = await coindeskPriceService.compareRateWithMarket(
+        usdAmount,
+        conversion.exchangeRate
+      );
+
+      res.json({
+        success: true,
+        data: {
+          yourRate: {
+            tier: conversion.tierName,
+            rate: conversion.exchangeRate,
+            usdtAmount: conversion.usdtAmount,
+            fee: conversion.conversionFee,
+            feePercentage: conversion.feePercentage
+          },
+          marketRate: comparison.marketRate,
+          comparison: comparison.difference,
+          note: 'Market rate shown for transparency. Your tiered rates include service fees.',
+          timestamp: new Date()
         }
       });
     } catch (error) {
