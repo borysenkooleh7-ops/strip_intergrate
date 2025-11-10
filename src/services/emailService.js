@@ -28,19 +28,29 @@ class EmailService {
             user: config.email.user,
             pass: config.email.password,
           },
+          // Add connection timeout to prevent hanging
+          connectionTimeout: 10000, // 10 seconds
+          greetingTimeout: 10000,
+          socketTimeout: 10000,
         });
 
-        // Verify connection
-        this.transporter.verify((error, success) => {
-          if (error) {
-            logger.error('❌ Email transporter verification failed:', {
-              error: error.message,
-              stack: error.stack
-            });
-          } else {
-            logger.info('✅ Email service is ready to send emails');
-          }
-        });
+        // Verify connection asynchronously (non-blocking)
+        // Use setTimeout to prevent blocking server startup
+        setTimeout(() => {
+          this.transporter.verify((error, success) => {
+            if (error) {
+              logger.error('❌ Email transporter verification failed:', {
+                error: error.message,
+                code: error.code
+              });
+              logger.warn('⚠️ Email service will still attempt to send emails despite verification failure');
+            } else {
+              logger.info('✅ Email service verified and ready to send emails');
+            }
+          });
+        }, 1000); // Verify after 1 second (non-blocking)
+
+        logger.info('📧 Email transporter created (verification in progress...)');
       } else {
         // For development: use console logging
         logger.warn('⚠️ EMAIL SERVICE NOT CONFIGURED - Emails will only be logged to console');
@@ -187,7 +197,17 @@ class EmailService {
     try {
       if (this.transporter) {
         logger.info('📧 Sending verification email...', { to: email });
-        const info = await this.transporter.sendMail(mailOptions);
+
+        // Add timeout wrapper to prevent hanging
+        const sendWithTimeout = Promise.race([
+          this.transporter.sendMail(mailOptions),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Email send timeout after 30 seconds')), 30000)
+          )
+        ]);
+
+        const info = await sendWithTimeout;
+
         logger.info('✅ Verification email sent successfully!', {
           email,
           messageId: info.messageId,
