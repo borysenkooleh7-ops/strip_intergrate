@@ -22,41 +22,43 @@ class AuthController {
         });
       }
 
-      // Create new user
+      // Create new user with email auto-verified (email verification disabled)
       const user = await User.create({
         email,
         password,
         fullName,
         walletAddress: walletAddress || null,
-        emailVerified: false
+        emailVerified: true  // Auto-verify to allow immediate login
       });
 
-      // Generate verification code
-      const verificationCode = user.generateEmailVerificationToken();
-      await user.save({ validateBeforeSave: false });
+      // Email verification is DISABLED due to SMTP blocking on hosting
+      // Optionally send welcome email (will fail silently if SMTP blocked)
+      // try {
+      //   const verificationCode = user.generateEmailVerificationToken();
+      //   await user.save({ validateBeforeSave: false });
+      //   await emailService.sendVerificationEmail(email, fullName, verificationCode);
+      //   logger.info('Welcome email sent', { userId: user._id, email: user.email });
+      // } catch (emailError) {
+      //   logger.warn('Could not send welcome email (SMTP blocked)', {
+      //     error: emailError.message,
+      //     userId: user._id,
+      //     email: user.email
+      //   });
+      // }
 
-      // Send verification email
-      let emailSent = false;
-      try {
-        await emailService.sendVerificationEmail(email, fullName, verificationCode);
-        emailSent = true;
-        logger.info('User registered successfully - verification email sent', { userId: user._id, email: user.email });
-      } catch (emailError) {
-        logger.error('Failed to send verification email', {
-          error: emailError.message,
-          userId: user._id,
-          email: user.email
-        });
-        // Don't fail registration if email fails, but log it
-        logger.warn('⚠️ User registered but email not sent - verification code logged to console');
-      }
+      // Generate JWT token for auto-login
+      const token = jwt.sign({ id: user._id }, config.jwt.secret, {
+        expiresIn: config.jwt.expiresIn
+      });
+
+      logger.info('User registered successfully (auto-verified)', { userId: user._id, email: user.email });
 
       res.status(201).json({
         success: true,
-        message: 'Registration successful! Please check your email for verification code.',
+        message: 'Registration successful! You can now login.',
         data: {
-          email: user.email,
-          requiresVerification: true
+          user: user.toJSON(),
+          token: token
         }
       });
     } catch (error) {
@@ -91,15 +93,17 @@ class AuthController {
         });
       }
 
-      // Check if email is verified
-      if (!user.emailVerified) {
-        return res.status(403).json({
-          success: false,
-          message: 'Please verify your email before logging in',
-          requiresVerification: true,
-          email: user.email
-        });
-      }
+      // Email verification is now OPTIONAL (disabled due to SMTP blocking on hosting)
+      // Users can login without verifying their email
+      // TODO: Re-enable when using a proper email service (SendGrid, Mailgun, etc.)
+      // if (!user.emailVerified) {
+      //   return res.status(403).json({
+      //     success: false,
+      //     message: 'Please verify your email before logging in',
+      //     requiresVerification: true,
+      //     email: user.email
+      //   });
+      // }
 
       // Generate JWT token
       const token = jwt.sign({ id: user._id }, config.jwt.secret, {
