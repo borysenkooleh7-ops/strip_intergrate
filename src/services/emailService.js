@@ -11,7 +11,15 @@ class EmailService {
   initializeTransporter() {
     try {
       // Create transporter based on environment
-      if (config.email && config.email.host) {
+      if (config.email && config.email.host && config.email.user && config.email.password) {
+        logger.info('Initializing email transporter with config:', {
+          host: config.email.host,
+          port: config.email.port,
+          secure: config.email.secure,
+          user: config.email.user,
+          from: config.email.from
+        });
+
         this.transporter = nodemailer.createTransport({
           host: config.email.host,
           port: config.email.port,
@@ -21,9 +29,30 @@ class EmailService {
             pass: config.email.password,
           },
         });
+
+        // Verify connection
+        this.transporter.verify((error, success) => {
+          if (error) {
+            logger.error('❌ Email transporter verification failed:', {
+              error: error.message,
+              stack: error.stack
+            });
+          } else {
+            logger.info('✅ Email service is ready to send emails');
+          }
+        });
       } else {
-        // For development: use ethereal email (test email service)
-        logger.warn('Email service not configured. Using console logging in development mode.');
+        // For development: use console logging
+        logger.warn('⚠️ EMAIL SERVICE NOT CONFIGURED - Emails will only be logged to console');
+        logger.warn('Missing email configuration:', {
+          hasHost: !!config.email?.host,
+          hasUser: !!config.email?.user,
+          hasPassword: !!config.email?.password
+        });
+        logger.warn('To enable email sending:');
+        logger.warn('1. Set EMAIL_HOST, EMAIL_USER, EMAIL_PASSWORD in your .env file');
+        logger.warn('2. For Gmail: Generate App Password at https://myaccount.google.com/apppasswords');
+        logger.warn('3. Restart the server after adding credentials');
         this.transporter = null;
       }
     } catch (error) {
@@ -157,26 +186,53 @@ class EmailService {
 
     try {
       if (this.transporter) {
+        logger.info('📧 Sending verification email...', { to: email });
         const info = await this.transporter.sendMail(mailOptions);
-        logger.info('Verification email sent', { email, messageId: info.messageId });
+        logger.info('✅ Verification email sent successfully!', {
+          email,
+          messageId: info.messageId,
+          response: info.response
+        });
         return { success: true, messageId: info.messageId };
       } else {
-        // Development mode: log to console
-        logger.info('VERIFICATION EMAIL (Development Mode)', {
+        // Development/No Config mode: log to console
+        logger.warn('⚠️ EMAIL NOT SENT - Email service not configured');
+        logger.info('VERIFICATION EMAIL (Console Only - NOT SENT)', {
           to: email,
           code: verificationCode,
           link: verificationLink
         });
-        console.log('\n========== VERIFICATION EMAIL ==========');
+        console.log('\n========================================');
+        console.log('📧 VERIFICATION EMAIL (NOT ACTUALLY SENT)');
+        console.log('========================================');
         console.log('To:', email);
         console.log('Verification Code:', verificationCode);
         console.log('Verification Link:', verificationLink);
+        console.log('========================================');
+        console.log('⚠️  EMAIL SERVICE NOT CONFIGURED!');
+        console.log('Configure EMAIL_HOST, EMAIL_USER, EMAIL_PASSWORD');
+        console.log('in your .env file to send real emails.');
         console.log('========================================\n');
-        return { success: true, messageId: 'dev-mode' };
+        return { success: true, messageId: 'dev-mode-console-only' };
       }
     } catch (error) {
-      logger.error('Failed to send verification email', { email, error: error.message });
-      throw new Error('Failed to send verification email');
+      logger.error('❌ Failed to send verification email', {
+        email,
+        error: error.message,
+        stack: error.stack,
+        code: error.code
+      });
+
+      // Log specific SMTP errors
+      if (error.code === 'EAUTH') {
+        logger.error('Authentication failed - Check EMAIL_USER and EMAIL_PASSWORD');
+      } else if (error.code === 'ECONNECTION') {
+        logger.error('Connection failed - Check EMAIL_HOST and EMAIL_PORT');
+      } else if (error.code === 'ETIMEDOUT') {
+        logger.error('Connection timeout - Check your network and email server');
+      }
+
+      throw new Error('Failed to send verification email: ' + error.message);
     }
   }
 

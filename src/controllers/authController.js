@@ -36,14 +36,20 @@ class AuthController {
       await user.save({ validateBeforeSave: false });
 
       // Send verification email
+      let emailSent = false;
       try {
         await emailService.sendVerificationEmail(email, fullName, verificationCode);
+        emailSent = true;
+        logger.info('User registered successfully - verification email sent', { userId: user._id, email: user.email });
       } catch (emailError) {
-        logger.error('Failed to send verification email', { error: emailError.message });
-        // Don't fail registration if email fails
+        logger.error('Failed to send verification email', {
+          error: emailError.message,
+          userId: user._id,
+          email: user.email
+        });
+        // Don't fail registration if email fails, but log it
+        logger.warn('⚠️ User registered but email not sent - verification code logged to console');
       }
-
-      logger.info('User registered successfully - verification email sent', { userId: user._id, email: user.email });
 
       res.status(201).json({
         success: true,
@@ -272,15 +278,18 @@ class AuthController {
       // Send verification email
       try {
         await emailService.sendVerificationEmail(email, user.fullName, verificationCode);
+        logger.info('Verification email resent successfully', { userId: user._id, email: user.email });
       } catch (emailError) {
-        logger.error('Failed to resend verification email', { error: emailError.message });
+        logger.error('Failed to resend verification email', {
+          error: emailError.message,
+          userId: user._id,
+          email: user.email
+        });
         return res.status(500).json({
           success: false,
-          message: 'Failed to send verification email'
+          message: 'Failed to send verification email. Please check server logs or contact support.'
         });
       }
-
-      logger.info('Verification email resent', { userId: user._id, email: user.email });
 
       res.json({
         success: true,
